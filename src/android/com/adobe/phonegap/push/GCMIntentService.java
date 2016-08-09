@@ -18,7 +18,6 @@ import android.os.Bundle;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
 import android.support.v4.app.NotificationCompat.WearableExtender;
-import android.support.v4.app.RemoteInput;
 import android.text.Html;
 import android.text.Spanned;
 import android.util.Log;
@@ -64,39 +63,10 @@ public class GCMIntentService extends GcmListenerService implements PushConstant
 
         if (extras != null) {
 
-            SharedPreferences prefs = getApplicationContext().getSharedPreferences(PushPlugin.COM_ADOBE_PHONEGAP_PUSH, Context.MODE_PRIVATE);
-            boolean forceShow = prefs.getBoolean(FORCE_SHOW, false);
-            boolean clearBadge = prefs.getBoolean(CLEAR_BADGE, false);
-
             extras = normalizeExtras(extras);
 
-            if (clearBadge) {
-                PushPlugin.setApplicationIconBadgeNumber(getApplicationContext(), 0);
-            }
+            showNotificationIfPossible(getApplicationContext(), extras);
 
-            // if we are in the foreground and forceShow is `false` only send data
-            if (!forceShow && PushPlugin.isInForeground()) {
-                Log.d(LOG_TAG, "foreground");
-                extras.putBoolean(FOREGROUND, true);
-                extras.putBoolean(COLDSTART, false);
-                PushPlugin.sendExtras(extras);
-            }
-            // if we are in the foreground and forceShow is `true`, force show the notification if the data has at least a message or title
-            else if (forceShow && PushPlugin.isInForeground()) {
-                Log.d(LOG_TAG, "foreground force");
-                extras.putBoolean(FOREGROUND, true);
-                extras.putBoolean(COLDSTART, false);
-
-                showNotificationIfPossible(getApplicationContext(), extras);
-            }
-            // if we are not in the foreground always send notification if the data has at least a message or title
-            else {
-                Log.d(LOG_TAG, "background");
-                extras.putBoolean(FOREGROUND, false);
-                extras.putBoolean(COLDSTART, PushPlugin.isActive());
-
-                showNotificationIfPossible(getApplicationContext(), extras);
-            }
         }
     }
 
@@ -219,11 +189,15 @@ public class GCMIntentService extends GcmListenerService implements PushConstant
     }
 
     private void showNotificationIfPossible (Context context, Bundle extras) {
+        String namePreference = "lineMonitorPreference";
+        SharedPreferences notificationPrefs = getApplicationContext().getSharedPreferences(namePreference, Context.MODE_PRIVATE);
+        boolean isNotificationAble = notificationPrefs.getBoolean("notification", true);
 
         // Send a notification if there is a message or title, otherwise just send data
         String message = extras.getString(MESSAGE);
         String title = extras.getString(TITLE);
         String contentAvailable = extras.getString(CONTENT_AVAILABLE);
+        String forceStart = extras.getString(FORCE_START);
         int badgeCount = extractBadgeCount(extras);
         if (badgeCount >= 0) {
             Log.d(LOG_TAG, "count =[" + badgeCount + "]");
@@ -236,16 +210,22 @@ public class GCMIntentService extends GcmListenerService implements PushConstant
 
         if ((message != null && message.length() != 0) ||
                 (title != null && title.length() != 0)) {
-
-            Log.d(LOG_TAG, "create notification");
-
-            createNotification(context, extras);
+            if(isNotificationAble){
+              createNotification(context, extras);
+            }
         }
 
         if ("1".equals(contentAvailable)) {
-            Log.d(LOG_TAG, "send notification event");
             PushPlugin.sendExtras(extras);
         }
+
+        if(!PushPlugin.isActive() && "1".equals(forceStart)){
+			      Intent intent = new Intent(this, PushHandlerActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.putExtra(PUSH_BUNDLE, extras);
+	          intent.putExtra(START_ON_BACKGROUND, true);
+            startActivity(intent);
+ 		    }
     }
 
     public void createNotification(Context context, Bundle extras) {
@@ -364,15 +344,8 @@ public class GCMIntentService extends GcmListenerService implements PushConstant
         mNotificationManager.notify(appName, notId, mBuilder.build());
     }
 
-    private void updateIntent(Intent intent, String callback, Bundle extras, boolean foreground, int notId) {
-        intent.putExtra(CALLBACK, callback);
-        intent.putExtra(PUSH_BUNDLE, extras);
-        intent.putExtra(FOREGROUND, foreground);
-        intent.putExtra(NOT_ID, notId);
-    }
-
     private void createActions(Bundle extras, NotificationCompat.Builder mBuilder, Resources resources, String packageName, int notId) {
-        Log.d(LOG_TAG, "create actions: with in-line");
+        Log.d(LOG_TAG, "create actions");
         String actions = extras.getString(ACTIONS);
         if (actions != null) {
             try {
@@ -383,62 +356,30 @@ public class GCMIntentService extends GcmListenerService implements PushConstant
                     JSONObject action = actionsArray.getJSONObject(i);
                     Log.d(LOG_TAG, "adding callback = " + action.getString(CALLBACK));
                     boolean foreground = action.optBoolean(FOREGROUND, true);
-                    boolean inline = action.optBoolean("inline", false);
                     Intent intent = null;
                     PendingIntent pIntent = null;
-                    if (inline) {
-                        Log.d(LOG_TAG, "Version: " + android.os.Build.VERSION.SDK_INT + " = " + android.os.Build.VERSION_CODES.M);
-                        if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) {
-                            Log.d(LOG_TAG, "push activity");
-                            intent = new Intent(this, PushHandlerActivity.class);
-                        } else {
-                            Log.d(LOG_TAG, "push receiver");
-                            intent = new Intent(this, BackgroundActionButtonHandler.class);
-                        }
-
-                        updateIntent(intent, action.getString(CALLBACK), extras, foreground, notId);
-
-                        if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) {
-                            Log.d(LOG_TAG, "push activity");
-                            pIntent = PendingIntent.getActivity(this, i, intent, PendingIntent.FLAG_ONE_SHOT);
-                        } else {
-                            Log.d(LOG_TAG, "push receiver");
-                            pIntent = PendingIntent.getBroadcast(this, i, intent, PendingIntent.FLAG_ONE_SHOT);
-                        }
-                    } else if (foreground) {
+                    if (foreground) {
                         intent = new Intent(this, PushHandlerActivity.class);
-                        updateIntent(intent, action.getString(CALLBACK), extras, foreground, notId);
+                        intent.putExtra(CALLBACK, action.getString(CALLBACK));
+                        intent.putExtra(PUSH_BUNDLE, extras);
+                        intent.putExtra(FOREGROUND, foreground);
+                        intent.putExtra(NOT_ID, notId);
                         pIntent = PendingIntent.getActivity(this, i, intent, PendingIntent.FLAG_UPDATE_CURRENT);
                     } else {
                         intent = new Intent(this, BackgroundActionButtonHandler.class);
-                        updateIntent(intent, action.getString(CALLBACK), extras, foreground, notId);
+                        intent.putExtra(CALLBACK, action.getString(CALLBACK));
+                        intent.putExtra(PUSH_BUNDLE, extras);
+                        intent.putExtra(FOREGROUND, foreground);
+                        intent.putExtra(NOT_ID, notId);
                         pIntent = PendingIntent.getBroadcast(this, i, intent, PendingIntent.FLAG_UPDATE_CURRENT);
                     }
-
-                    NotificationCompat.Action.Builder actionBuilder =
-                        new NotificationCompat.Action.Builder(resources.getIdentifier(action.optString(ICON, ""), DRAWABLE, packageName),
+                    NotificationCompat.Action wAction =
+                            new NotificationCompat.Action.Builder(resources.getIdentifier(action.optString(ICON, ""), DRAWABLE, packageName),
+                                    action.getString(TITLE), pIntent)
+                                    .build();
+                    wActions.add(wAction);
+                    mBuilder.addAction(resources.getIdentifier(action.optString(ICON, ""), DRAWABLE, packageName),
                             action.getString(TITLE), pIntent);
-
-                    RemoteInput remoteInput = null;
-                    if (inline) {
-                        Log.d(LOG_TAG, "create remote input");
-                        String replyLabel = "Enter your reply here";
-                        remoteInput =
-                                new RemoteInput.Builder(INLINE_REPLY)
-                                .setLabel(replyLabel)
-                                .build();
-                        actionBuilder.addRemoteInput(remoteInput);
-                    }
-
-                    NotificationCompat.Action wAction = actionBuilder.build();
-                    wActions.add(actionBuilder.build());
-
-                    if (inline) {
-                        mBuilder.addAction(wAction);
-                    } else {
-                        mBuilder.addAction(resources.getIdentifier(action.optString(ICON, ""), DRAWABLE, packageName),
-                                action.getString(TITLE), pIntent);
-                    }
                     wAction = null;
                     pIntent = null;
                 }
