@@ -191,7 +191,7 @@ public class GCMIntentService extends GcmListenerService implements PushConstant
     private void showNotificationIfPossible (Context context, Bundle extras) {
         String namePreference = "lineMonitorPreference";
         SharedPreferences notificationPrefs = getApplicationContext().getSharedPreferences(namePreference, Context.MODE_PRIVATE);
-        boolean isNotificationAble = notificationPrefs.getBoolean("notification", true);
+        boolean isNotificationAble = notificationPrefs.getBoolean("notification", false);
 
         // Send a notification if there is a message or title, otherwise just send data
         String message = extras.getString(MESSAGE);
