@@ -149,20 +149,21 @@ public class GCMIntentService extends GcmListenerService implements PushConstant
                         Log.e(LOG_TAG, "normalizeExtras: JSON exception");
                     }
                 }
-            } else if (key.equals(("notification"))) {
-                Bundle value = extras.getBundle(key);
-                Iterator<String> iterator = value.keySet().iterator();
-                while (iterator.hasNext()) {
-                    String notifkey = iterator.next();
-
-                    Log.d(LOG_TAG, "notifkey = " + notifkey);
-                    String newKey = normalizeKey(notifkey);
-                    Log.d(LOG_TAG, "replace key " + notifkey + " with " + newKey);
-
-                    newExtras.putString(newKey, value.getString(notifkey));
-                }
-                continue;
             }
+            // else if (key.equals(("notification"))) {
+            //     Bundle value = extras.getBundle(key);
+            //     Iterator<String> iterator = value.keySet().iterator();
+            //     while (iterator.hasNext()) {
+            //         String notifkey = iterator.next();
+            //
+            //         Log.d(LOG_TAG, "notifkey = " + notifkey);
+            //         String newKey = normalizeKey(notifkey);
+            //         Log.d(LOG_TAG, "replace key " + notifkey + " with " + newKey);
+            //
+            //         newExtras.putString(newKey, value.getString(notifkey));
+            //     }
+            //     continue;
+            // }
 
             String newKey = normalizeKey(key);
             Log.d(LOG_TAG, "replace key " + key + " with " + newKey);
