@@ -30,11 +30,6 @@ public class PushHandlerActivity extends Activity implements PushConstants {
         boolean foreground = getIntent().getExtras().getBoolean("foreground", true);
         boolean startOnBackground = getIntent().getExtras().getBoolean(START_ON_BACKGROUND, true);
 
-        if(!startOnBackground){
-          NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-          notificationManager.cancel(GCMIntentService.getAppName(this), notId);
-        }
-
         Log.d(LOG_TAG, "bringToForeground = " + foreground);
 
         boolean isPushPluginActive = PushPlugin.isActive();
